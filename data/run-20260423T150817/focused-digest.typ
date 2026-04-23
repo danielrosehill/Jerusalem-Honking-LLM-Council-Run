@@ -57,7 +57,7 @@ The central risk is not failure to launch — it is the documented Israeli patte
 
 *Estimated effort.* Medium — budget line for inspector FTEs, IT procurement for case-management system, and training programme.
 
-*Concrete first step.* The Jerusalem Green Fund submits a written question to the Environmental Quality Committee (chaired by Yonatan Peleg #src("02-mynet-jerusalem-bylaw.md")) requesting answers before April 2026: (a) how many inspector FTEs are allocated; (b) who delivers the training; (c) target turnaround time from detection to fine issuance; (d) which IT system will manage the case queue.
+*Concrete first step.* The Jerusalem Green Fund submits a written question to the Environmental Quality Committee (chaired by Yonatan Peleg #src("02-mynet-jerusalem-bylaw.md")) requesting answers within two weeks — i.e. before cameras are commissioned in early May 2026: (a) how many inspector FTEs are allocated; (b) who delivers the training; (c) target turnaround time from detection to fine issuance; (d) which IT system will manage the case queue.
 
 == Rank 2 — Publish and Enforce the MoEP 70% Incident-Handling Grant Condition as a Public Accountability Metric
 
