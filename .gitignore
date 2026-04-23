@@ -12,8 +12,11 @@ wheels/
 # Keys and secrets
 .env
 
-# Data files
+# Data files (runs) — commit selected runs individually via `git add -f`
 data/
+
+# Playwright debugging snapshots
+.playwright-mcp/
 
 # Frontend
 frontend/node_modules/

@@ -1,0 +1,42 @@
+{
+  "label_to_model": {
+    "Response A": "Urban Planner",
+    "Response B": "Municipal Fiscal Officer",
+    "Response C": "Community & Equity Advocate",
+    "Response D": "Legal & Regulatory Analyst",
+    "Response E": "Service Delivery Practitioner",
+    "Response F": "Policy Innovation & Comparative Scholar"
+  },
+  "aggregate_rankings": [
+    {
+      "model": "Urban Planner",
+      "average_rank": 1.67,
+      "rankings_count": 6
+    },
+    {
+      "model": "Community & Equity Advocate",
+      "average_rank": 2.33,
+      "rankings_count": 6
+    },
+    {
+      "model": "Service Delivery Practitioner",
+      "average_rank": 2.67,
+      "rankings_count": 6
+    },
+    {
+      "model": "Legal & Regulatory Analyst",
+      "average_rank": 3.5,
+      "rankings_count": 6
+    },
+    {
+      "model": "Municipal Fiscal Officer",
+      "average_rank": 4.83,
+      "rankings_count": 6
+    },
+    {
+      "model": "Policy Innovation & Comparative Scholar",
+      "average_rank": 6.0,
+      "rankings_count": 6
+    }
+  ]
+}

@@ -1,8 +1,51 @@
 """3-stage LLM Council orchestration with personality-based members."""
 
+import json
+import os
+from pathlib import Path
 from typing import List, Dict, Any, Tuple
 from .openrouter import query_personalities_parallel, query_model
-from .config import COUNCIL_MODEL, CHAIRMAN_MODEL, COUNCIL_PERSONALITIES
+from .config import (
+    COUNCIL_MODEL,
+    CHAIRMAN_MODEL,
+    COUNCIL_PERSONALITIES,
+    COUNCIL_QUESTIONS,
+    COUNCIL_RESPONSE_SCHEMA,
+)
+
+
+_GROUNDING_DIR = Path(__file__).resolve().parent.parent / "grounding"
+
+
+def _load_grounding_context() -> str:
+    """Load every markdown file in grounding/ and concatenate for prompt use."""
+    if not _GROUNDING_DIR.is_dir():
+        return ""
+    parts: List[str] = []
+    for path in sorted(_GROUNDING_DIR.glob("*.md")):
+        try:
+            parts.append(f"===== FILE: {path.name} =====\n\n{path.read_text()}")
+        except OSError:
+            continue
+    if not parts:
+        return ""
+    return (
+        "GROUNDING CONTEXT — primary sources on the Jerusalem honking issue. "
+        "Treat the figures, dates, quotations, and source names below as the "
+        "authoritative factual basis for your reasoning. Prefer citing these "
+        "over recalling from memory.\n\n"
+        + "\n\n".join(parts)
+    )
+
+
+_GROUNDING_CONTEXT_CACHE: str | None = None
+
+
+def get_grounding_context() -> str:
+    global _GROUNDING_CONTEXT_CACHE
+    if _GROUNDING_CONTEXT_CACHE is None:
+        _GROUNDING_CONTEXT_CACHE = _load_grounding_context()
+    return _GROUNDING_CONTEXT_CACHE
 
 
 def get_personality_name(personality_id: str) -> str:
@@ -13,30 +56,79 @@ def get_personality_name(personality_id: str) -> str:
     return personality_id
 
 
+def _build_stage1_user_prompt(problem_statement: str) -> str:
+    """Compose the per-councillor prompt asking one answer per question."""
+    questions_block = "\n\n".join(
+        f"{q['id'].upper()} — {q['label']}:\n{q['question']}"
+        for q in COUNCIL_QUESTIONS
+    )
+    keys = ", ".join(f"\"{q['id']}\"" for q in COUNCIL_QUESTIONS)
+    return (
+        "PROBLEM STATEMENT:\n"
+        f"{problem_statement}\n\n"
+        "QUESTIONS — answer each one from your councillor lens:\n\n"
+        f"{questions_block}\n\n"
+        "Respond with a single JSON object containing exactly these keys: "
+        f"{keys}. Each value is your answer to that question, written from "
+        "your specific policy lens and with explicit awareness of the Middle "
+        "East / Israeli municipal context. Draw your facts, figures, and "
+        "quotations from the GROUNDING CONTEXT attached to this conversation; "
+        "cite source file names (e.g. 10-kolhair-jerusalem-quiet-cities.md) "
+        "when referring to specific claims."
+    )
+
+
 async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
     """
-    Stage 1: Collect individual responses from all council personalities.
+    Stage 1: Collect structured per-question responses from every councillor.
 
-    Each personality is the same underlying LLM but with a different system prompt
-    that shapes its thinking style.
+    Each councillor returns a JSON object keyed by question id, with the
+    Tavily search tool available for grounded answers.
     """
-    user_messages = [{"role": "user", "content": user_query}]
+    grounding = get_grounding_context()
+    user_messages: List[Dict[str, Any]] = []
+    if grounding:
+        user_messages.append({"role": "user", "content": grounding})
+    user_messages.append(
+        {"role": "user", "content": _build_stage1_user_prompt(user_query)}
+    )
 
     responses = await query_personalities_parallel(
-        COUNCIL_MODEL, COUNCIL_PERSONALITIES, user_messages
+        COUNCIL_MODEL,
+        COUNCIL_PERSONALITIES,
+        user_messages,
+        response_format={"type": "json_schema", "json_schema": COUNCIL_RESPONSE_SCHEMA},
     )
 
     stage1_results = []
     for personality in COUNCIL_PERSONALITIES:
         response = responses.get(personality["id"])
-        if response is not None:
-            stage1_results.append({
-                "model": personality["id"],
-                "name": personality["name"],
-                "response": response.get('content', '')
-            })
+        if response is None:
+            continue
+        raw = response.get("content", "") or ""
+        parsed: Dict[str, str] = {}
+        try:
+            parsed = json.loads(raw) if raw else {}
+        except json.JSONDecodeError:
+            parsed = {}
+        rendered = _render_per_question_answers(parsed) if parsed else raw
+        stage1_results.append({
+            "model": personality["id"],
+            "name": personality["name"],
+            "response": rendered,
+            "answers": parsed,
+        })
 
     return stage1_results
+
+
+def _render_per_question_answers(answers: Dict[str, str]) -> str:
+    """Render the per-question JSON into a readable markdown block."""
+    lines = []
+    for q in COUNCIL_QUESTIONS:
+        ans = answers.get(q["id"], "").strip()
+        lines.append(f"### {q['id'].upper()} — {q['label']}\n\n{ans}")
+    return "\n\n".join(lines)
 
 
 async def stage2_collect_rankings(
@@ -163,19 +255,27 @@ government official could take directly to a working session. Structure the repo
    data, consultation, or legal review.
 
 Write in a neutral, report-style register suitable for a municipal audience. Do not invent
-facts; stay grounded in what the council actually said. Do not flatten the distinct lenses into
-generic prose — preserve attribution where it matters."""
+facts; stay grounded in what the council actually said and in the GROUNDING CONTEXT provided.
+Do not flatten the distinct lenses into generic prose — preserve attribution where it matters.
+When you evaluate the councillors' recommendations for usefulness, test them against the
+grounding context: a recommendation that contradicts, ignores, or duplicates something already
+happening in the grounding should be flagged accordingly."""
 
-    messages = [
+    grounding = get_grounding_context()
+    messages: List[Dict[str, Any]] = [
         {"role": "system", "content": (
             "You are the Chairman of a local-governance Policy Ideation Council. Your role is "
             "to synthesise the councillors' diverse policy perspectives into a structured "
             "ideation report that a municipal decision-maker can act on. You preserve "
             "distinct lenses, surface tensions honestly, and produce a catalogue of ideas "
-            "rather than a single recommended answer."
-        )},
-        {"role": "user", "content": chairman_prompt}
+            "rather than a single recommended answer. A curated bundle of primary sources is "
+            "attached as GROUNDING CONTEXT — use it to fact-check the councillors and to judge "
+            "which recommendations are genuinely additive versus already in motion."
+        )}
     ]
+    if grounding:
+        messages.append({"role": "user", "content": grounding})
+    messages.append({"role": "user", "content": chairman_prompt})
 
     response = await query_model(CHAIRMAN_MODEL, messages)
 
